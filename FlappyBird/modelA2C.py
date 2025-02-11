@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 
-class A2Cmodel:
+class A2C:
     def __init__(self, num_states, num_actions, discount):
             # hyperparameters
         initializer = tf.keras.initializers.HeNormal()

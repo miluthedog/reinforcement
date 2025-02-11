@@ -1,7 +1,7 @@
 import pygame
 import tensorflow as tf
-from envBird import FlappyBird
-from modelBird import A2Cmodel
+from enviroment import FlappyBird
+from FlappyBird.modelA2C import A2C
 
 
 class testBird:
@@ -26,9 +26,9 @@ class testBird:
         pygame.quit()
 
     def AI(self):
-        model = A2Cmodel(4, 2, 0.999)
-        model.actor = tf.keras.models.load_model('5flappybirdA2C/actor.keras')
-        model.critic = tf.keras.models.load_model('5flappybirdA2C/critic.keras')
+        model = A2C(4, 2, 0.999)
+        model.actor = tf.keras.models.load_model('FlappyBird\models\A2Cactor.keras')
+        model.critic = tf.keras.models.load_model('FlappyBird\models\A2Ccritic.keras')
 
         for i in range(1000):
             try:
