@@ -31,48 +31,49 @@ class A2C:
         value = self.critic(state)
         return tf.squeeze(policy), tf.squeeze(value)
 
-    def train(self, states, actions, rewards, log_policies, values):
-        Qvalues = np.zeros_like(rewards)
-        Qvalue = 0
-        for i in reversed(range(len(rewards))):
-            Qvalue = rewards[i] + self.discount * Qvalue
-            Qvalues[i] = Qvalue
-
-        states = tf.convert_to_tensor(states)
-        actions = tf.convert_to_tensor(actions)
-        log_policies = tf.convert_to_tensor(log_policies)
-        advantages = tf.convert_to_tensor(Qvalues) - values
-        advantages = (advantages - np.mean(advantages)) / (np.std(advantages) + 1e-8)
+    def training_loop(self, env, max_loops):
+        states, actions, rewards, log_policies, values = [], [], [], [], []
+        state = env.reset_game()
         
         with tf.GradientTape(persistent=True) as tape:
+            for loop in range(max_loops):
+                policy, value = self.predict(state)
+                action = np.random.choice(self.num_actions, p=policy.numpy())
+                next_state, reward = env.game_loop(action)
+
+                states.append(state)
+                actions.append(action)
+                rewards.append(reward)
+                log_policies.append(tf.math.log(policy[action] + 1e-8))
+                values.append(value)
+
+                state = next_state
+
+                if env.game_over:
+                    Qvalue = 0
+                    break
+                elif loop == max_loops - 1:
+                    _, Qvalue = self.forward(state)
+                    break
+
+            Qvalues = np.zeros_like(rewards)
+            for i in reversed(range(len(rewards))):
+                Qvalue = rewards[i] + self.discount * Qvalue
+                Qvalues[i] = Qvalue
+
+            log_policies = tf.convert_to_tensor(log_policies, dtype=tf.float32)
+            advantages = tf.convert_to_tensor(Qvalues, dtype=tf.float32) - tf.convert_to_tensor(values, dtype=tf.float32)
+            advantages = (advantages - np.mean(advantages)) / (np.std(advantages) + 1e-8)
+
             actor_loss = -tf.reduce_mean(log_policies * advantages)
             critic_loss = tf.reduce_mean(tf.square(advantages))
-            
+
         actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
         self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
         critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
         self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
-    def training_loop(self, env, max_loops):
+        self.score = env.score
+        self.reward = sum(rewards)
         states, actions, rewards, log_policies, values = [], [], [], [], []
         state = env.reset_game()
-
-        for loop in range (max_loops):
-            policy, value = self.predict(state)
-            action = np.random.choice(self.num_actions, p=policy.numpy())
-            next_state, reward = env.game_loop(action)
-
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
-            log_policies.append(tf.math.log(policy[action] + 1e-8))
-            values.append(value)
-
-            state = next_state
-            self.score = env.score
-            self.reward = sum(rewards)
-
-            if env.game_over or loop == max_loops - 1:
-                self.train(states, actions, rewards, log_policies, values)
-                states, actions, rewards, log_policies, values = [], [], [], [], []
-                state = env.reset_game()
