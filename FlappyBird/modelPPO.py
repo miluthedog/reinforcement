@@ -2,15 +2,13 @@ import tensorflow as tf
 import numpy as np
 
 
-class A2C:
-    def __init__(self, discount, clip_epsilon, minibatch_size, minibatch_epoch):
+class PPO:
+    def __init__(self, discount):
         self.num_states = 4
         self.num_actions = 2
         self.learning_rate = 0.001
         self.discount = discount
-        self.clip_epsilon = clip_epsilon
-        self.minibatch_size = minibatch_size
-        self.minibatch_epoch = minibatch_epoch
+        self.clip_epsilon = 0.2 # best choice according to PPO paper
 
         initializer = tf.keras.initializers.HeNormal()
         self.actor = tf.keras.models.Sequential([
@@ -34,7 +32,7 @@ class A2C:
         value = self.critic(state)
         return tf.squeeze(policy), tf.squeeze(value)
 
-    def train(self, states, actions, rewards, old_policies, values):
+    def train(self, states, actions, rewards, policies, values):
         Qvalues = np.zeros_like(rewards)
         Qvalue = 0
         for i in reversed(range(len(rewards))):
@@ -43,19 +41,19 @@ class A2C:
 
         states = tf.convert_to_tensor(states)
         actions = tf.convert_to_tensor(actions)
-        old_policies = tf.convert_to_tensor(old_policies)
+        policies = tf.convert_to_tensor(policies)
         advantages = tf.convert_to_tensor(Qvalues) - values
-        advantages = (advantages - np.mean(advantages)) / (np.std(advantages) + 1e-8)
-
+        
+        old_actions_index = tf.range(len(actions), dtype=tf.int32)
+        old_probs = tf.gather_nd(policies, tf.stack([old_actions_index, actions], axis=1))
+        new_policies = self.actor(states) 
+        new_probs = tf.gather_nd(new_policies, tf.stack([old_actions_index, actions], axis=1))
+        
+        ratio = new_probs / old_probs
+        clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
         with tf.GradientTape(persistent=True) as tape:
-            for _ in range(self.minibatch_epoch):
-                new_policy = self.actor(states)
-                value = self.critic(states)
-
-                ratio = new_policy/(old_policies)
-                clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
-                actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
-                critic_loss = tf.reduce_mean(tf.square(advantages))
+            actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
+            critic_loss = tf.reduce_mean(tf.square(advantages))
             
         actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
         self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
@@ -63,7 +61,7 @@ class A2C:
         self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
     def training_loop(self, env, max_loops):
-        states, actions, rewards, old_policies, values = [], [], [], [], []
+        states, actions, rewards, policies, values = [], [], [], [], []
         state = env.reset_game()
 
         for loop in range (max_loops):
@@ -74,13 +72,14 @@ class A2C:
             states.append(state)
             actions.append(action)
             rewards.append(reward)
-            old_policies.append(policy[action])
+            policies.append(policy[action])
             values.append(value)
 
             state = next_state
             self.score = env.score
             self.reward = sum(rewards)
+
             if env.game_over or loop == max_loops - 1:
-                self.train(states, actions, rewards, old_policies, values)
-                states, actions, rewards, old_policies, values = [], [], [], [], []
+                self.train(states, actions, rewards, policies, values)
+                states, actions, rewards, policies, values = [], [], [], [], []
                 state = env.reset_game()

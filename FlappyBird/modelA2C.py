@@ -71,6 +71,7 @@ class A2C:
             state = next_state
             self.score = env.score
             self.reward = sum(rewards)
+
             if env.game_over or loop == max_loops - 1:
                 self.train(states, actions, rewards, log_policies, values)
                 states, actions, rewards, log_policies, values = [], [], [], [], []
