@@ -108,7 +108,8 @@ class FlappyBird:
             horizontal_distance / self.SIZE[0], # [0, 1]
             vertical_distance / self.SIZE[1],   # [-0.5, 0.5]
             self.bird_y / self.SIZE[1],         # [0, 1]
-            self.bird_velocity / 20]            # Normalized velocity
+            self.bird_velocity / 20,            # Normalized velocity
+            self.score]                         # (this state scale with reward)
         return state
 
     def game_loop(self, action):

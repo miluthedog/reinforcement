@@ -4,9 +4,9 @@ import numpy as np
 
 class PPO:
     def __init__(self, discount):
-        self.num_states = 4
+        self.num_states = 5
         self.num_actions = 2
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
         self.discount = discount
         self.clip_epsilon = 0.2 # best choice according to PPO paper
 
@@ -56,7 +56,7 @@ class PPO:
                 elif loop == max_loops - 1:
                     _, Qvalue = self.forward(state)
                     break
-            
+
             Qvalues = np.zeros_like(rewards)
             for i in reversed(range(len(rewards))):
                 Qvalue = rewards[i] + self.discount * Qvalue
@@ -66,23 +66,24 @@ class PPO:
             actions = tf.convert_to_tensor(actions, dtype=tf.int32)
             policies = tf.convert_to_tensor(policies, dtype=tf.float32)
             advantages = tf.convert_to_tensor(Qvalues, dtype=tf.float32) - tf.convert_to_tensor(values, dtype=tf.float32)
-            
+
             old_actions_index = tf.range(len(actions), dtype=tf.int32)
             old_probs = tf.gather(policies, old_actions_index)
             new_policies = self.actor(states) 
             new_probs = tf.gather_nd(new_policies, tf.stack([old_actions_index, actions], axis=1))
-            
+
             ratio = new_probs / old_probs
             clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
-            actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
-            critic_loss = tf.reduce_mean(tf.square(advantages))
-                
-        actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
+
+            self.actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
+            self.critic_loss = tf.reduce_mean(tf.square(advantages))
+
+        actor_grads = tape.gradient(self.actor_loss, self.actor.trainable_variables)
         self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
-        critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
+        critic_grads = tape.gradient(self.critic_loss, self.critic.trainable_variables)
         self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
         self.score = env.score
         self.reward = sum(rewards)
-        states, actions, rewards, log_policies, values = [], [], [], [], []
+        states, actions, rewards, policies, values = [], [], [], [], []
         state = env.reset_game()
