@@ -6,7 +6,7 @@ class PPO:
     def __init__(self, discount):
         self.num_states = 5
         self.num_actions = 2
-        self.learning_rate = 0.0001
+        self.learning_rate = 0.0003
         self.discount = discount
         self.clip_epsilon = 0.2 # best choice according to PPO paper
 
