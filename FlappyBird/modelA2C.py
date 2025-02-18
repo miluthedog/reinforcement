@@ -3,10 +3,10 @@ import numpy as np
 
 
 class A2C:
-    def __init__(self, discount):
+    def __init__(self):
         self.num_states = 5
         self.num_actions = 2
-        self.discount = discount
+        self.discount = 0.999
 
         initializer = tf.keras.initializers.HeNormal()
         self.actor = tf.keras.models.Sequential([

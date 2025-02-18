@@ -3,22 +3,22 @@ import numpy as np
 
 
 class PPO:
-    def __init__(self, discount):
-        self.num_states = 5
+    def __init__(self):
+        self.num_states = (80, 120, 4)
         self.num_actions = 2
         self.learning_rate = 0.0003
-        self.discount = discount
+        self.discount = 0.999
         self.clip_epsilon = 0.2 # best choice according to PPO paper
 
         initializer = tf.keras.initializers.HeNormal()
         self.actor = tf.keras.models.Sequential([
-            tf.keras.Input(shape=(self.num_states,)),
+            tf.keras.Input(shape=self.num_states),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(self.num_actions, activation='softmax', kernel_initializer=initializer)])
         self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.critic = tf.keras.models.Sequential([
-            tf.keras.Input(shape=(self.num_states,)),
+            tf.keras.Input(shape=self.num_states),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(1, activation='linear', kernel_initializer=initializer)])
