@@ -73,5 +73,3 @@ class A2C:
 
         self.score = env.score
         self.reward = sum(rewards)
-        states, actions, rewards, log_policies, values = [], [], [], [], []
-        state = env.reset_game()

@@ -1,32 +1,60 @@
 import tensorflow as tf
 import numpy as np
+import cv2 as cv
+from collections import deque
 
 
 class PPO:
     def __init__(self):
-        self.num_states = (80, 120, 4)
+        self.frames = 12
+        self.frame_stack = deque(maxlen=self.frames)
+
+        self.num_states = (80, 120, self.frames)
         self.num_actions = 2
-        self.learning_rate = 0.0003
-        self.discount = 0.999
+        self.learning_rate = 0.001
+        self.discount = 0.99
         self.clip_epsilon = 0.2 # best choice according to PPO paper
 
         initializer = tf.keras.initializers.HeNormal()
         self.actor = tf.keras.models.Sequential([
             tf.keras.Input(shape=self.num_states),
-            tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
-            tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Conv2D(32, (8, 8), strides=4, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Conv2D(64, (4, 4), strides=2, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Conv2D(64, (3, 3), strides=1, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(512, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(self.num_actions, activation='softmax', kernel_initializer=initializer)])
         self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        self.old_model = self.actor
+
         self.critic = tf.keras.models.Sequential([
             tf.keras.Input(shape=self.num_states),
-            tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
-            tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Conv2D(32, (8, 8), strides=4, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Conv2D(64, (4, 4), strides=2, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Conv2D(64, (3, 3), strides=1, activation='relu', kernel_initializer=initializer),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(512, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(1, activation='linear', kernel_initializer=initializer)])
         self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
 
+    
+    def get_frame(self, env):
+        frame = env.state_frame()
+        gray = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
+        resized = cv.resize(gray, (120, 80), interpolation=cv.INTER_AREA)
+        processed = resized.astype(np.float32) / 255.0  # [0,1]
 
-    def predict(self, state):
-        state = tf.convert_to_tensor(state)
+        if len(self.frame_stack) < self.frames:
+            for _ in range(self.frames):  
+                self.frame_stack.append(processed)
+        else:
+            self.frame_stack.append(processed)
+
+        return np.stack(self.frame_stack, axis=-1)
+
+
+    def predict(self, env):
+        state = self.get_frame(env)
         state = tf.expand_dims(tf.convert_to_tensor(state), 0)
         policy = self.actor(state)
         value = self.critic(state)
@@ -34,13 +62,14 @@ class PPO:
 
     def training_loop(self, env, max_loops):
         states, actions, rewards, policies, values = [], [], [], [], []
-        state = env.reset_game()
+        env.reset_game()
+        state = self.get_frame(env)
         
         with tf.GradientTape(persistent=True) as tape:
             for loop in range (max_loops):
-                policy, value = self.predict(state)
+                policy, value = self.predict(env)
                 action = np.random.choice(self.num_actions, p=policy.numpy())
-                next_state, reward = env.game_loop(action)
+                _, reward = env.game_loop(action)
 
                 states.append(state)
                 actions.append(action)
@@ -48,13 +77,13 @@ class PPO:
                 policies.append(policy[action])
                 values.append(value)
 
-                state = next_state
+                state = self.get_frame(env)
 
                 if env.game_over:
                     Qvalue = 0
                     break
                 elif loop == max_loops - 1:
-                    _, Qvalue = self.predict(state)
+                    _, Qvalue = self.predict(env)
                     break
 
             Qvalues = np.zeros_like(rewards)
@@ -75,16 +104,14 @@ class PPO:
             ratio = new_probs / old_probs
             clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
 
-            self.actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
-            self.critic_loss = tf.reduce_mean(tf.square(advantages))
-            total_loss = self.actor_loss + 0.5*self.critic_loss
+            actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
+            critic_loss = tf.reduce_mean(tf.square(advantages))
+            self.total_loss = actor_loss + 0.5 * critic_loss
 
-        actor_grads = tape.gradient(total_loss, self.actor.trainable_variables)
+        actor_grads = tape.gradient(self.total_loss, self.actor.trainable_variables)
         self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
-        critic_grads = tape.gradient(total_loss, self.critic.trainable_variables)
+        critic_grads = tape.gradient(self.total_loss, self.critic.trainable_variables)
         self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
         self.score = env.score
         self.reward = sum(rewards)
-        states, actions, rewards, policies, values = [], [], [], [], []
-        state = env.reset_game()
