@@ -1,7 +1,7 @@
 import pygame
 import tensorflow as tf
 from enviroment import FlappyBird
-from FlappyBird.modelA2C import A2C
+from modelA2C import A2C
 
 
 class testBird:

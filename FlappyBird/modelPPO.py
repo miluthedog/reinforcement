@@ -35,8 +35,8 @@ class PPO:
     def training_loop(self, env, max_loops):
         states, actions, rewards, policies, values = [], [], [], [], []
         state = env.reset_game()
+        
         with tf.GradientTape(persistent=True) as tape:
-
             for loop in range (max_loops):
                 policy, value = self.predict(state)
                 action = np.random.choice(self.num_actions, p=policy.numpy())
@@ -54,7 +54,7 @@ class PPO:
                     Qvalue = 0
                     break
                 elif loop == max_loops - 1:
-                    _, Qvalue = self.forward(state)
+                    _, Qvalue = self.predict(state)
                     break
 
             Qvalues = np.zeros_like(rewards)
@@ -77,10 +77,11 @@ class PPO:
 
             self.actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
             self.critic_loss = tf.reduce_mean(tf.square(advantages))
+            total_loss = self.actor_loss + 0.5*self.critic_loss
 
-        actor_grads = tape.gradient(self.actor_loss, self.actor.trainable_variables)
+        actor_grads = tape.gradient(total_loss, self.actor.trainable_variables)
         self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
-        critic_grads = tape.gradient(self.critic_loss, self.critic.trainable_variables)
+        critic_grads = tape.gradient(total_loss, self.critic.trainable_variables)
         self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
         self.score = env.score
