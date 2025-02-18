@@ -112,9 +112,6 @@ class FlappyBird:
             self.score]                         # (this state scale with reward)
         return state
 
-    def state_frame(self):
-        return pygame.surfarray.array3d(pygame.display.get_surface())
-
 
     def game_loop(self, action):
         reward = 0.05
