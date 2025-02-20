@@ -5,7 +5,7 @@ This repository contains implementations of various reinforcement learning (RL) 
 - **`train<name>.ipynb`**: Manages the training process.
 
 ## 1. Flappy Bird
-Implemented similar-structure models with A2C and PPO algorithms. Both models performed similarly (no significant changes), and stopped learning around an average score of 7 (15,000 episodes). The issues may be accused from feature engineering.
+Implemented similar-structure models with A2C and PPO algorithms. Both models performed similarly (no significant changes), and stopped learning around an average score of 4, peaked 17 (15,000 episodes). The issues may be accused from feature engineering.
 - **A2C (Advantage Actor-Critic)** using `tf.keras` </br>
 > First 3000 episodes train on A2C </br>
 
