@@ -4,28 +4,28 @@ import numpy as np
 
 class PPO:
     def __init__(self):
-        self.num_states = 5
-        self.num_actions = 2
-        self.discount = 0.99
-        self.clip_epsilon = 0.2 # best choice according to PPO paper
+        self.numStates = 5
+        self.numActions = 2
+        self.discountFactor = 0.99
+        self.clipEpsilon = 0.2  # best choice according to PPO paper
 
         initializer = tf.keras.initializers.HeNormal()
         self.actor = tf.keras.models.Sequential([
-            tf.keras.Input(shape=(self.num_states,)),
+            tf.keras.Input(shape=(self.numStates,)),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
-            tf.keras.layers.Dense(self.num_actions, activation='softmax', kernel_initializer=initializer)])
-        self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+            tf.keras.layers.Dense(self.numActions, activation='softmax', kernel_initializer=initializer)])
+        self.actorOptimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
 
-        self.old_actor = tf.keras.models.clone_model(self.actor)
-        self.old_actor.set_weights(self.actor.get_weights())
+        self.oldActor = tf.keras.models.clone_model(self.actor)
+        self.oldActor.set_weights(self.actor.get_weights())
 
         self.critic = tf.keras.models.Sequential([
-            tf.keras.Input(shape=(self.num_states,)),
+            tf.keras.Input(shape=(self.numStates,)),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(64, activation='relu', kernel_initializer=initializer),
             tf.keras.layers.Dense(1, activation='linear', kernel_initializer=initializer)])
-        self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0003)
+        self.criticOptimizer = tf.keras.optimizers.Adam(learning_rate=0.0003)
 
 
     def predict(self, state):
@@ -35,15 +35,15 @@ class PPO:
         value = self.critic(state)
         return tf.squeeze(policy), tf.squeeze(value)
 
-    def training_loop(self, env, max_loops):
+    def trainingLoop(self, env, maxLoops):
         states, actions, rewards, policies, values = [], [], [], [], []
-        state = env.reset_game()
+        state = env.resetGame()
         
         with tf.GradientTape(persistent=True) as tape:
-            for loop in range (max_loops):
+            for loop in range(maxLoops):
                 policy, value = self.predict(state)
-                action = np.random.choice(self.num_actions, p=policy.numpy())
-                next_state, reward = env.game_loop(action)
+                action = np.random.choice(self.numActions, p=policy.numpy())
+                nextState, reward = env.gameLoop(action)
 
                 states.append(state)
                 actions.append(action)
@@ -51,41 +51,41 @@ class PPO:
                 policies.append(policy[action])
                 values.append(value)
 
-                state = next_state
+                state = nextState
 
-                if env.game_over:
-                    Qvalue = 0
+                if env.gameOver:
+                    qValue = 0
                     break
-                elif loop == max_loops - 1:
-                    _, Qvalue = self.predict(state)
+                elif loop == maxLoops - 1:
+                    _, qValue = self.predict(state)
                     break
 
-            Qvalues = np.zeros_like(rewards)
+            qValues = np.zeros_like(rewards)
             for i in reversed(range(len(rewards))):
-                Qvalue = rewards[i] + self.discount * Qvalue
-                Qvalues[i] = Qvalue
+                qValue = rewards[i] + self.discountFactor * qValue
+                qValues[i] = qValue
 
             states = tf.convert_to_tensor(states, dtype=tf.float32)
             actions = tf.convert_to_tensor(actions, dtype=tf.int32)
             policies = tf.convert_to_tensor(policies, dtype=tf.float32)
-            advantages = tf.convert_to_tensor(Qvalues, dtype=tf.float32) - tf.convert_to_tensor(values, dtype=tf.float32)
+            advantages = tf.convert_to_tensor(qValues, dtype=tf.float32) - tf.convert_to_tensor(values, dtype=tf.float32)
 
-            actions_index = tf.range(len(actions), dtype=tf.int32)
-            new_probs = tf.gather(policies, actions_index)
-            old_policies = self.old_actor(states)
-            self.old_actor.set_weights(self.actor.get_weights())
-            old_probs = tf.gather_nd(old_policies, tf.stack([actions_index, actions], axis=1))
+            actionsIndex = tf.range(len(actions), dtype=tf.int32)
+            newProbs = tf.gather(policies, actionsIndex)
+            oldPolicies = self.oldActor(states)
+            self.oldActor.set_weights(self.actor.get_weights())
+            oldProbs = tf.gather_nd(oldPolicies, tf.stack([actionsIndex, actions], axis=1))
 
-            ratio = new_probs / old_probs
-            clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
+            ratio = newProbs / oldProbs
+            clippedRatio = tf.clip_by_value(ratio, 1 - self.clipEpsilon, 1 + self.clipEpsilon)
 
-            self.actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, clipped_ratio * advantages))
-            self.critic_loss = tf.reduce_mean(tf.square(advantages))
+            self.actorLoss = -tf.reduce_mean(tf.minimum(ratio * advantages, clippedRatio * advantages))
+            self.criticLoss = tf.reduce_mean(tf.square(advantages))
 
-        actor_grads = tape.gradient(self.actor_loss, self.actor.trainable_variables)
-        self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
-        critic_grads = tape.gradient(self.critic_loss, self.critic.trainable_variables)
-        self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+        actorGrads = tape.gradient(self.actorLoss, self.actor.trainable_variables)
+        self.actorOptimizer.apply_gradients(zip(actorGrads, self.actor.trainable_variables))
+        criticGrads = tape.gradient(self.criticLoss, self.critic.trainable_variables)
+        self.criticOptimizer.apply_gradients(zip(criticGrads, self.critic.trainable_variables))
 
         self.score = env.score
         self.reward = sum(rewards)
