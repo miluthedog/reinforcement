@@ -2,7 +2,7 @@ import os
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import pygame
 import tensorflow as tf
-from enviroment import FlappyBird
+from FlappyBird.environment import FlappyBird
 from modelA2C import A2C
 from modelPPO import PPO
 
